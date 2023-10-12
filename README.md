@@ -1,3 +1,3 @@
-# REST APIS RECORDING PROJECT
+# REST APIS PROJECT
 
 Nothing here yet!
