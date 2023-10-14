@@ -1,20 +1,24 @@
+from flask import jsonify
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
+from flask_jwt_extended import (
+    create_access_token,
+    create_refresh_token,
+    get_jwt_identity,
+    get_jwt,
+    jwt_required,
+)
 from passlib.hash import pbkdf2_sha256
-from flask_jwt_extended import create_access_token
-from flask_jwt_extended import create_refresh_token
-from flask_jwt_extended import get_jwt_identity  
-from flask_jwt_extended import get_jwt
-from flask_jwt_extended import jwt_required
-
-
-
 
 from db import db
+from resources.decorator import roles_required
 from models import UserModel
 from schemas import UserSchema
 from blocklist import BLOCKLIST
-blp = Blueprint("Users", "users", description = "Operations on users")
+
+
+blp = Blueprint("Users", "users", description="Operations on users")
+
 
 @blp.route("/register")
 class UserRegister(MethodView):
@@ -26,12 +30,14 @@ class UserRegister(MethodView):
         user = UserModel(
             username=user_data["username"],
             password=pbkdf2_sha256.hash(user_data["password"]),
+            role = user_data['role']
         )
         db.session.add(user)
         db.session.commit()
 
         return {"message": "User created successfully."}, 201
-    
+
+
 @blp.route("/login")
 class UserLogin(MethodView):
     @blp.arguments(UserSchema)
@@ -41,22 +47,12 @@ class UserLogin(MethodView):
         ).first()
 
         if user and pbkdf2_sha256.verify(user_data["password"], user.password):
-            access_token = create_access_token(identity=user.id, fresh=True)
+            access_token = create_access_token(identity=user.id, additional_claims={"role": user.role}, fresh=True)     # noqa: E501
             refresh_token = create_refresh_token(user.id)
             return {"access_token": access_token, "refresh_token": refresh_token}, 200
 
         abort(401, message="Invalid credentials.")
 
-@blp.route("/refresh")
-class TokenRefresh(MethodView):
-    @jwt_required(refresh=True)
-    def post(self):
-        current_user = get_jwt_identity()
-        new_token = create_access_token(identity=current_user, fresh=False)
-        # Make it clear that when to add the refresh token to the blocklist will depend on the app design  # noqa: E501
-        jti = get_jwt()["jti"]
-        BLOCKLIST.add(jti)
-        return {"access_token": new_token}, 200
 
 @blp.route("/logout")
 class UserLogout(MethodView):
@@ -69,6 +65,12 @@ class UserLogout(MethodView):
 
 @blp.route("/user/<int:user_id>")
 class User(MethodView):
+    """
+    This resource can be useful when testing our Flask app.
+    We may not want to expose it to public users, but for the
+    sake of demonstration in this course, it can be useful
+    when we are manipulating data regarding the users.
+    """
 
     @blp.response(200, UserSchema)
     def get(self, user_id):
@@ -80,3 +82,20 @@ class User(MethodView):
         db.session.delete(user)
         db.session.commit()
         return {"message": "User deleted."}, 200
+    
+    @blp.route("/manager")
+    @jwt_required()
+    @roles_required('manager')
+    def manager():
+        return jsonify({'message': 'User authorized to access the manager endpoint.'})
+
+@blp.route("/refresh")
+class TokenRefresh(MethodView):
+    @jwt_required(refresh=True)
+    def post(self):
+        current_user = get_jwt_identity()
+        new_token = create_access_token(identity=current_user, fresh=False)
+        # Make it clear that when to add the refresh token to the blocklist will depend on the app design  # noqa: E501
+        jti = get_jwt()["jti"]
+        BLOCKLIST.add(jti)
+        return {"access_token": new_token}, 200
