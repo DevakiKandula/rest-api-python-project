@@ -30,6 +30,9 @@ def create_app(db_url=None):
     api = Api(app)
 
     app.config["JWT_SECRET_KEY"] = "jose"
+     # Database Initialization
+    with app.app_context():
+        db.create_all()
     jwt = JWTManager(app)
 
     # @jwt.additional_claims_loader
@@ -94,7 +97,12 @@ def create_app(db_url=None):
             ),
             401,
         )
-
+    @app.errorhandler(Exception)
+    def handle_error(error):
+        # Customize error response as needed
+        response = jsonify({"error": str(error)})
+        response.status_code = 500  # Internal Server Error
+        return response
 
 
     api.register_blueprint(UserBlueprint)
