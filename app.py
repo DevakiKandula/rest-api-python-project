@@ -1,4 +1,6 @@
 import os
+import redis
+from rq import Queue
 from flask import Flask, jsonify
 from flask_smorest import Api
 from flask_jwt_extended import JWTManager
@@ -7,6 +9,7 @@ from dotenv import load_dotenv
 
 from db import db
 from blocklist import BLOCKLIST
+
 
 from resources.user import blp as UserBlueprint
 from resources.item import blp as ItemBlueprint
@@ -17,6 +20,11 @@ from resources.tag import blp as TagBlueprint
 def create_app(db_url=None):
     app = Flask(__name__)
     load_dotenv()
+
+    connection = redis.from_url(
+    os.getenv("REDIS_URL")
+    )  # Get this from Render.com or run in Docker
+    app.queue = Queue("emails", connection=connection)
     app.config["API_TITLE"] = "Stores REST API"
     app.config["API_VERSION"] = "v1"
     app.config["OPENAPI_VERSION"] = "3.0.3"
